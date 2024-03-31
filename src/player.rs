@@ -1,4 +1,4 @@
-use bevy::{prelude::*, render::camera::Exposure, window::*};
+use bevy::{input::mouse::MouseMotion, prelude::*, render::camera::Exposure, window::*};
 use bevy_fps_controller::controller::*;
 use bevy_inspector_egui::InspectorOptions;
 use bevy_rapier3d::prelude::*;
@@ -13,9 +13,11 @@ impl Plugin for PlayerPlugin {
         // add things to your app here
         app
         .add_plugins(FpsControllerPlugin)
-        .add_systems(Startup, spawn_player)
-        .add_systems(Update, (respawn, manage_cursor))
-        .add_systems(Update, cast_ray);
+        .add_systems(Startup, setup_player)
+        .add_systems(FixedUpdate, player_movement)
+        .add_systems(Update, manage_cursor)
+        //.add_systems(Update, cast_ray)
+        ;
     }
 
 }
@@ -30,6 +32,9 @@ pub struct PlayerLogical;
 
 #[derive(Component, Debug)]
 pub struct PlayerRender;
+
+#[derive(Component, Debug)]
+pub struct Player;
 
 #[derive(Component, Debug)]
 pub struct ForwardHelper;
@@ -71,9 +76,54 @@ fn cast_ray(rapier_context: Res<RapierContext>,
         gizmos.ray(ray_pos, ray_dir, Color::GREEN);
 }
 
+fn setup_player(mut commands: Commands) {
+    commands.spawn((
+        Player,
+        Name::new("Player"),
+        RigidBody::KinematicVelocityBased,
+        Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.35),
+        KinematicCharacterController::default(),
+
+        TransformBundle {
+            local: Transform::from_translation(SPAWN_POINT),
+            ..default()
+        }
+    ))
+    .with_children(|p| {
+        p.spawn(
+            Camera3dBundle {
+                transform: Transform::from_xyz(0.0, 1.0, 0.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+                projection: Projection::Perspective(PerspectiveProjection {
+                    fov: TAU / 5.0,
+                    ..default()
+                }),
+                exposure: Exposure::INDOOR,
+                ..default()
+            }
+        );
+    });
+    
+}
+
+fn player_movement(
+    mut mouse_input: EventReader<MouseMotion>,
+    mut cameras: Query<&mut Transform, (With<Camera>, Without<Player>)>,
+    time: Res<Time>,
+    mut players: Query<&mut Transform, (With<Player>, Without<Camera>)>,
+) {
+    let mut cam_transform = cameras.get_single_mut().unwrap();
+    let mut player_transform = players.get_single_mut().unwrap();
+    for event in mouse_input.read() {
+        println!("mouse moved {:?}", event);
+        let delta = event.delta;
+        
+        cam_transform.rotate_axis(Vec3::Y, -delta.x * 0.1 * time.delta_seconds());
+        player_transform.rotate_axis(Vec3::X, -delta.y * 0.1 * time.delta_seconds());
+    }
+}
 
 // player stuff
-fn spawn_player(mut commands: Commands) {
+fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Note that we have two entities for the player
     // One is a "logical" player that handles the physics computation and collision
     // The other is a "render" player that is what is displayed to the user
@@ -146,6 +196,12 @@ fn spawn_player(mut commands: Commands) {
         }
     ).with_children(|parent| {
         parent.spawn(PointLightBundle::default());
+    }).with_children(|p| {
+        p.spawn(SceneBundle {
+            scene: asset_server.load("HoodieCharacter.glb#Scene0"),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0),
+            ..default()
+        });
     });
 
     
