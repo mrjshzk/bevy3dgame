@@ -5,6 +5,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod player;
 mod gtlf_helper;
+pub mod camera;
 pub mod collider_generator;
 
 use gtlf_helper::MakeMesh;
